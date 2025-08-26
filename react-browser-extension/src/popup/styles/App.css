@@ -1,0 +1,240 @@
+.app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px 20px;
+  text-align: center;
+  position: relative;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.version {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.nav {
+  display: flex;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.nav-item {
+  flex: 1;
+  padding: 12px 8px;
+  text-decoration: none;
+  color: #6c757d;
+  text-align: center;
+  font-size: 13px;
+  transition: all 0.2s;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.nav-item.active {
+  background: #007bff;
+  color: white;
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Home页面样式 */
+.home {
+  padding: 16px;
+}
+
+.info-item {
+  margin-bottom: 8px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item strong {
+  color: #495057;
+}
+
+.info-value {
+  word-break: break-all;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-buttons .btn {
+  flex: 1;
+  min-width: 80px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc3545;
+  transition: background-color 0.2s;
+}
+
+.status-dot.active {
+  background: #28a745;
+}
+
+/* Settings页面样式 */
+.settings {
+  padding: 16px;
+}
+
+.save-section {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.save-section .btn {
+  width: 100%;
+}
+
+/* About页面样式 */
+.about {
+  padding: 16px;
+}
+
+.hero {
+  text-align: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+}
+
+.logo {
+  margin-bottom: 16px;
+}
+
+.logo-icon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.hero h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.hero .version {
+  position: static;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.description {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
+.feature-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature-list li {
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.tech-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tech-item {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #e9ecef;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #495057;
+}
+
+.info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.info-item strong {
+  color: #495057;
+}
+
+.info-item span {
+  color: #6c757d;
+  font-family: monospace;
+}
+
+.link-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-buttons .btn {
+  width: 100%;
+  text-align: center;
+}
+
+.license, .copyright {
+  margin: 0;
+  font-size: 13px;
+  color: #6c757d;
+  text-align: center;
+}
+
+.copyright {
+  margin-top: 8px;
+  font-style: italic;
+}
