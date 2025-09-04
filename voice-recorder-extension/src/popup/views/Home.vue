@@ -12,6 +12,23 @@
       <div v-if="store.permissionError" class="error-text mt-16">
         {{ store.permissionError }}
       </div>
+      
+      <!-- 页面支持提示 -->
+      <div v-if="!pageSupport.supported && pageSupport.reason" class="page-support-warning mt-16">
+        <div class="warning-icon">⚠️</div>
+        <div class="warning-content">
+          <div class="warning-title">页面不支持录音</div>
+          <div class="warning-message">{{ pageSupport.reason }}</div>
+          <div v-if="pageSupport.suggestions && pageSupport.suggestions.length > 0" class="suggestions mt-8">
+            <div class="suggestions-title">建议操作：</div>
+            <ul class="suggestions-list">
+              <li v-for="suggestion in pageSupport.suggestions" :key="suggestion">
+                {{ suggestion }}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 录音控制区域 -->
@@ -119,11 +136,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRecorderStore } from '../store'
-import AudioRecorder from '../../utils/audioRecorder'
+import ExtensionRecorder from '../../utils/extensionRecorder'
 import { chromeUtils } from '../../utils'
 
 const store = useRecorderStore()
-const recorder = new AudioRecorder()
+const recorder = new ExtensionRecorder()
 
 // 响应式数据
 const isCheckingPermission = ref(true)
@@ -132,11 +149,24 @@ const isProcessing = ref(false)
 const recordingTimer = ref(null)
 const showSaveDialog = ref(false)
 const recordingName = ref('')
+const pageSupport = ref({ supported: true, reason: '', suggestions: [] })
 const recordingData = ref(null)
 const nameInput = ref(null)
 
-// 组件挂载时检查权限
+// 组件挂载时检查权限和页面支持
 onMounted(async () => {
+  // 检查页面支持情况
+  try {
+    const supportCheck = await recorder.checkPageSupport()
+    pageSupport.value = supportCheck
+  } catch (error) {
+    console.error('页面支持检查失败:', error)
+    pageSupport.value = {
+      supported: false,
+      reason: '无法检查页面支持情况，请刷新页面后重试'
+    }
+  }
+  
   await checkInitialPermission()
   await store.loadFromStorage()
 })
@@ -181,7 +211,15 @@ async function requestPermission() {
     
     console.log('开始请求麦克风权限...')
     
-    // 使用 AudioRecorder 的权限请求方法
+    // 首先检查页面支持
+    const supportCheck = await recorder.checkPageSupport()
+    pageSupport.value = supportCheck
+    
+    if (!supportCheck.supported) {
+      throw new Error(supportCheck.reason)
+    }
+    
+    // 使用 ExtensionRecorder 的权限请求方法
     await recorder.requestPermission()
     
     // 权限获取成功
@@ -480,6 +518,61 @@ function cleanup() {
   color: #e74c3c;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.page-support-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.warning-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-title {
+  font-weight: 600;
+  color: #856404;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.warning-message {
+  color: #856404;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.suggestions {
+  margin-top: 8px;
+}
+
+.suggestions-title {
+  font-weight: 600;
+  color: #856404;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.suggestions-list {
+  margin: 0;
+  padding-left: 16px;
+  color: #856404;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.suggestions-list li {
+  margin-bottom: 2px;
 }
 
 .mt-16 {

@@ -9,11 +9,56 @@ let mediaRecorder = null
 let recordingStartTime = null
 let recordingIndicator = null
 
-// 监听来自 background script 的消息
+// 扩展录音器相关变量
+let extensionRecorder = null
+let extensionStream = null
+let extensionAudioChunks = []
+let extensionRecordingStartTime = null
+
+// 监听来自 background script 和 popup 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script 收到消息:', message)
   
   switch (message.type) {
+    case 'PING':
+      sendResponse({ success: true, message: 'Content script 运行正常' })
+      break
+      
+    case 'REQUEST_MICROPHONE_PERMISSION':
+      handleMicrophonePermissionRequest()
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true // 异步响应
+      
+    case 'START_EXTENSION_RECORDING':
+      handleExtensionRecordingStart(message.options)
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true // 异步响应
+      
+    case 'STOP_EXTENSION_RECORDING':
+      handleExtensionRecordingStop()
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true // 异步响应
+      
+    case 'PAUSE_EXTENSION_RECORDING':
+      handleExtensionRecordingPause()
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true // 异步响应
+      
+    case 'RESUME_EXTENSION_RECORDING':
+      handleExtensionRecordingResume()
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }))
+      return true // 异步响应
+      
+    case 'GET_RECORDING_STATE':
+      const state = extensionRecorder ? extensionRecorder.state : 'inactive'
+      sendResponse({ success: true, state })
+      break
+      
     case 'START_RECORDING_FROM_CONTEXT':
       handleContextMenuRecording()
       sendResponse({ success: true })
@@ -41,6 +86,287 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ error: 'Unknown message type' })
   }
 })
+
+// 处理麦克风权限请求
+async function handleMicrophonePermissionRequest() {
+  try {
+    console.log('请求麦克风权限...')
+    
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 44100
+      }
+    })
+    
+    // 立即停止流，只是为了测试权限
+    stream.getTracks().forEach(track => track.stop())
+    
+    console.log('麦克风权限获取成功')
+    return { success: true, message: '麦克风权限已获取' }
+    
+  } catch (error) {
+    console.error('麦克风权限获取失败:', error)
+    
+    let errorMessage = '获取麦克风权限失败'
+    
+    switch (error.name) {
+      case 'NotAllowedError':
+        errorMessage = '用户拒绝了麦克风权限，请点击地址栏的麦克风图标允许访问'
+        break
+      case 'NotFoundError':
+        errorMessage = '未检测到麦克风设备，请连接麦克风后重试'
+        break
+      case 'NotReadableError':
+        errorMessage = '麦克风被其他应用程序占用，请关闭其他录音软件'
+        break
+      case 'OverconstrainedError':
+        errorMessage = '麦克风不支持请求的配置，请尝试使用其他麦克风'
+        break
+      case 'SecurityError':
+        errorMessage = '安全限制，请确保在 HTTPS 环境下使用'
+        break
+    }
+    
+    throw new Error(errorMessage)
+  }
+}
+
+// 处理扩展录音开始
+async function handleExtensionRecordingStart(options = {}) {
+  try {
+    console.log('开始扩展录音...', options)
+    
+    // 如果已在录音，先停止
+    if (extensionRecorder) {
+      await handleExtensionRecordingStop()
+    }
+    
+    // 获取麦克风权限
+    extensionStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: options.echoCancellation !== false,
+        noiseSuppression: options.noiseSuppression !== false,
+        autoGainControl: options.autoGainControl !== false,
+        sampleRate: 44100
+      }
+    })
+    
+    // 创建 MediaRecorder
+    const mimeType = getSupportedMimeType(options.quality || 'high')
+    extensionRecorder = new MediaRecorder(extensionStream, {
+      mimeType: mimeType.type,
+      audioBitsPerSecond: mimeType.bitrate
+    })
+    
+    extensionAudioChunks = []
+    extensionRecordingStartTime = Date.now()
+    
+    // 录音数据事件
+    extensionRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        extensionAudioChunks.push(event.data)
+      }
+    }
+    
+    // 录音错误事件
+    extensionRecorder.onerror = (event) => {
+      console.error('扩展录音错误:', event.error)
+    }
+    
+    // 开始录音
+    extensionRecorder.start(1000)
+    
+    // 显示录音指示器
+    showExtensionRecordingIndicator()
+    
+    console.log('扩展录音开始成功')
+    return { success: true, message: '录音已开始' }
+    
+  } catch (error) {
+    console.error('开始扩展录音失败:', error)
+    throw error
+  }
+}
+
+// 处理扩展录音停止
+async function handleExtensionRecordingStop() {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!extensionRecorder || extensionRecorder.state === 'inactive') {
+        throw new Error('当前没有录音')
+      }
+      
+      extensionRecorder.onstop = () => {
+        try {
+          const audioBlob = new Blob(extensionAudioChunks, {
+            type: extensionRecorder.mimeType
+          })
+          
+          const audioUrl = URL.createObjectURL(audioBlob)
+          const duration = Math.floor((Date.now() - extensionRecordingStartTime) / 1000)
+          
+          const recordingData = {
+            blob: audioBlob,
+            url: audioUrl,
+            duration: duration,
+            size: audioBlob.size,
+            mimeType: extensionRecorder.mimeType,
+            pageTitle: document.title,
+            pageUrl: window.location.href
+          }
+          
+          // 清理资源
+          cleanupExtensionRecording()
+          
+          console.log('扩展录音停止成功', recordingData)
+          resolve({ success: true, recordingData })
+          
+        } catch (error) {
+          reject(error)
+        }
+      }
+      
+      extensionRecorder.stop()
+      
+    } catch (error) {
+      reject(error)
+    }
+  })
+}
+
+// 处理扩展录音暂停
+async function handleExtensionRecordingPause() {
+  try {
+    if (!extensionRecorder || extensionRecorder.state !== 'recording') {
+      throw new Error('当前没有录音或录音未在进行中')
+    }
+    
+    extensionRecorder.pause()
+    console.log('扩展录音已暂停')
+    return { success: true, message: '录音已暂停' }
+    
+  } catch (error) {
+    console.error('暂停扩展录音失败:', error)
+    throw error
+  }
+}
+
+// 处理扩展录音恢复
+async function handleExtensionRecordingResume() {
+  try {
+    if (!extensionRecorder || extensionRecorder.state !== 'paused') {
+      throw new Error('当前没有暂停的录音')
+    }
+    
+    extensionRecorder.resume()
+    console.log('扩展录音已恢复')
+    return { success: true, message: '录音已恢复' }
+    
+  } catch (error) {
+    console.error('恢复扩展录音失败:', error)
+    throw error
+  }
+}
+
+// 清理扩展录音资源
+function cleanupExtensionRecording() {
+  if (extensionStream) {
+    extensionStream.getTracks().forEach(track => track.stop())
+    extensionStream = null
+  }
+  
+  extensionRecorder = null
+  extensionAudioChunks = []
+  extensionRecordingStartTime = null
+  
+  hideExtensionRecordingIndicator()
+}
+
+// 显示扩展录音指示器
+function showExtensionRecordingIndicator() {
+  hideExtensionRecordingIndicator()
+  
+  const indicator = document.createElement('div')
+  indicator.id = 'extension-recording-indicator'
+  indicator.innerHTML = `
+    <div style="
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: #28a745;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 999999;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      animation: pulse 1.5s ease-in-out infinite;
+    ">
+      <span style="font-size: 14px;">🎙️</span>
+      <span>录音助手录音中</span>
+    </div>
+    
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+      }
+    </style>
+  `
+  
+  document.body.appendChild(indicator)
+}
+
+// 隐藏扩展录音指示器
+function hideExtensionRecordingIndicator() {
+  const indicator = document.getElementById('extension-recording-indicator')
+  if (indicator) {
+    indicator.remove()
+  }
+}
+
+// 获取支持的音频格式
+function getSupportedMimeType(quality = 'high') {
+  const mimeTypes = {
+    high: [
+      { type: 'audio/webm;codecs=opus', bitrate: 128000 },
+      { type: 'audio/ogg;codecs=opus', bitrate: 128000 },
+      { type: 'audio/mp4', bitrate: 128000 },
+      { type: 'audio/webm', bitrate: 96000 }
+    ],
+    medium: [
+      { type: 'audio/webm;codecs=opus', bitrate: 64000 },
+      { type: 'audio/ogg;codecs=opus', bitrate: 64000 },
+      { type: 'audio/mp4', bitrate: 64000 },
+      { type: 'audio/webm', bitrate: 48000 }
+    ],
+    low: [
+      { type: 'audio/webm;codecs=opus', bitrate: 32000 },
+      { type: 'audio/ogg;codecs=opus', bitrate: 32000 },
+      { type: 'audio/mp4', bitrate: 32000 },
+      { type: 'audio/webm', bitrate: 24000 }
+    ]
+  }
+  
+  const candidates = mimeTypes[quality] || mimeTypes.high
+  
+  for (const candidate of candidates) {
+    if (MediaRecorder.isTypeSupported(candidate.type)) {
+      return candidate
+    }
+  }
+  
+  // 降级到基本格式
+  return { type: 'audio/webm', bitrate: 48000 }
+}
 
 // 处理右键菜单录音请求
 async function handleContextMenuRecording() {
