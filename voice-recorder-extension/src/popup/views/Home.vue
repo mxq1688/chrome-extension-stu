@@ -157,7 +157,7 @@ async function checkInitialPermission() {
       // 如果成功，立即停止流并设置权限为已授权
       stream.getTracks().forEach(track => track.stop())
       store.setPermission(true)
-      store.setPermissionError('')
+      store.setPermission(store.hasPermission, '')
     } catch (error) {
       // 如果失败，设置权限为未授权
       store.setPermission(false)
@@ -177,7 +177,7 @@ async function requestPermission() {
   
   try {
     isRequestingPermission.value = true
-    store.setPermissionError('')
+    store.setPermission(store.hasPermission, '')
     
     console.log('开始请求麦克风权限...')
     
@@ -199,7 +199,7 @@ async function requestPermission() {
   } catch (error) {
     console.error('权限请求失败:', error)
     store.setPermission(false)
-    store.setPermissionError(error.message)
+    store.setPermission(false, error.message)
     
     // 显示详细的错误提示
     let userFriendlyMessage = error.message
@@ -211,7 +211,7 @@ async function requestPermission() {
       userFriendlyMessage = '麦克风被其他程序占用，请关闭其他使用麦克风的程序后重试。'
     }
     
-    store.setPermissionError(userFriendlyMessage)
+    store.setPermission(false, userFriendlyMessage)
   } finally {
     isRequestingPermission.value = false
   }
@@ -232,7 +232,7 @@ async function startRecording() {
     })
     
     // 更新状态
-    store.startRecording()
+    store.setRecordingState(true, false)
     
     // 开始计时器
     startTimer()
@@ -241,7 +241,7 @@ async function startRecording() {
     
   } catch (error) {
     console.error('开始录音失败:', error)
-    store.setPermissionError(`开始录音失败: ${error.message}`)
+    store.setPermission(false, `开始录音失败: ${error.message}`)
   } finally {
     isProcessing.value = false
   }
@@ -256,11 +256,11 @@ async function togglePause() {
     
     if (store.isPaused) {
       await recorder.resumeRecording()
-      store.resumeRecording()
+      store.setRecordingState(true, false)
       console.log('录音恢复')
     } else {
       await recorder.pauseRecording()
-      store.pauseRecording()
+      store.setRecordingState(true, true)
       console.log('录音暂停')
     }
   } catch (error) {
@@ -284,7 +284,8 @@ async function stopRecording() {
     stopTimer()
     
     // 更新状态
-    store.stopRecording()
+    store.setRecordingState(false, false)
+    store.resetRecordingTime()
     
     console.log('录音停止', audioData)
     
@@ -307,7 +308,7 @@ async function stopRecording() {
     
   } catch (error) {
     console.error('停止录音失败:', error)
-    store.setPermissionError(`停止录音失败: ${error.message}`)
+    store.setPermission(false, `停止录音失败: ${error.message}`)
   } finally {
     isProcessing.value = false
   }
@@ -319,17 +320,14 @@ async function saveRecording() {
   
   try {
     const recording = {
-      id: Date.now().toString(),
       name: recordingName.value.trim(),
-      blob: recordingData.value.blob,
-      url: recordingData.value.url,
       duration: store.recordingTime,
       size: recordingData.value.size,
-      mimeType: recordingData.value.mimeType,
-      createdAt: new Date().toISOString()
+      audioUrl: recordingData.value.url,
+      audioBlob: recordingData.value.blob
     }
     
-    await store.addRecording(recording)
+    store.addRecording(recording)
     
     console.log('录音已保存:', recording.name)
     
@@ -346,7 +344,7 @@ async function saveRecording() {
     
   } catch (error) {
     console.error('保存录音失败:', error)
-    store.setPermissionError(`保存录音失败: ${error.message}`)
+    store.setPermission(false, `保存录音失败: ${error.message}`)
   }
 }
 
@@ -365,7 +363,7 @@ function startTimer() {
   
   recordingTimer.value = setInterval(() => {
     if (!store.isPaused) {
-      store.incrementTime()
+      store.updateRecordingTime(store.recordingTime + 1)
       
       // 检查最大录音时长
       if (store.recordingTime >= store.settings.maxDuration * 60) {
