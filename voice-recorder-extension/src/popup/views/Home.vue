@@ -12,23 +12,7 @@
       <div v-if="store.permissionError" class="error-text mt-16">
         {{ store.permissionError }}
       </div>
-      
-      <!-- 页面支持提示 -->
-      <div v-if="!pageSupport.supported && pageSupport.reason" class="page-support-warning mt-16">
-        <div class="warning-icon">⚠️</div>
-        <div class="warning-content">
-          <div class="warning-title">页面不支持录音</div>
-          <div class="warning-message">{{ pageSupport.reason }}</div>
-          <div v-if="pageSupport.suggestions && pageSupport.suggestions.length > 0" class="suggestions mt-8">
-            <div class="suggestions-title">建议操作：</div>
-            <ul class="suggestions-list">
-              <li v-for="suggestion in pageSupport.suggestions" :key="suggestion">
-                {{ suggestion }}
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+
     </div>
 
     <!-- 录音控制区域 -->
@@ -136,11 +120,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRecorderStore } from '../store'
-import ExtensionRecorder from '../../utils/extensionRecorder'
+import SimpleRecorder from '../../utils/simpleRecorder'
 import { chromeUtils } from '../../utils'
 
 const store = useRecorderStore()
-const recorder = new ExtensionRecorder()
+const recorder = new SimpleRecorder()
 
 // 响应式数据
 const isCheckingPermission = ref(true)
@@ -149,24 +133,12 @@ const isProcessing = ref(false)
 const recordingTimer = ref(null)
 const showSaveDialog = ref(false)
 const recordingName = ref('')
-const pageSupport = ref({ supported: true, reason: '', suggestions: [] })
+
 const recordingData = ref(null)
 const nameInput = ref(null)
 
-// 组件挂载时检查权限和页面支持
+// 组件挂载时检查权限
 onMounted(async () => {
-  // 检查页面支持情况
-  try {
-    const supportCheck = await recorder.checkPageSupport()
-    pageSupport.value = supportCheck
-  } catch (error) {
-    console.error('页面支持检查失败:', error)
-    pageSupport.value = {
-      supported: false,
-      reason: '无法检查页面支持情况，请刷新页面后重试'
-    }
-  }
-  
   await checkInitialPermission()
   await store.loadFromStorage()
 })
@@ -181,17 +153,13 @@ async function checkInitialPermission() {
   try {
     isCheckingPermission.value = true
     
-    // 对于 Chrome 扩展，直接尝试获取媒体流来检测权限
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // 如果成功，立即停止流并设置权限为已授权
-      stream.getTracks().forEach(track => track.stop())
-      store.setPermission(true)
-      store.setPermission(store.hasPermission, '')
-    } catch (error) {
-      // 如果失败，设置权限为未授权
-      store.setPermission(false)
-      console.log('权限检查失败:', error.message)
+    // 检查麦克风权限状态
+    const permissionState = await recorder.checkPermission()
+    
+    if (permissionState === 'granted') {
+      store.setPermission(true, '')
+    } else {
+      store.setPermission(false, '')
     }
   } catch (error) {
     console.error('权限检查错误:', error)
@@ -207,20 +175,17 @@ async function requestPermission() {
   
   try {
     isRequestingPermission.value = true
-    store.setPermission(store.hasPermission, '')
+    store.setPermission(false, '')
     
     console.log('开始请求麦克风权限...')
     
-    // 首先检查页面支持
-    const supportCheck = await recorder.checkPageSupport()
-    pageSupport.value = supportCheck
-    
-    if (!supportCheck.supported) {
-      throw new Error(supportCheck.reason)
+    // 检查浏览器支持
+    if (!recorder.isSupported()) {
+      throw new Error('您的浏览器不支持录音功能')
     }
     
-    // 使用 ExtensionRecorder 的权限请求方法
-    await recorder.requestPermission()
+    // 直接请求麦克风权限
+    await recorder.requestPermissionAndStart()
     
     // 权限获取成功
     store.setPermission(true)
@@ -262,12 +227,8 @@ async function startRecording() {
   try {
     isProcessing.value = true
     
-    // 获取录音设置
-    const settings = store.settings
-    
-    await recorder.startRecording({
-      quality: settings.quality
-    })
+    // 开始录音
+    await recorder.startRecording()
     
     // 更新状态
     store.setRecordingState(true, false)
