@@ -9,8 +9,7 @@
     "scripting",
     "tabs",
     "downloads",
-    "notifications",
-    "microphone"
+    "notifications"
   ],
   "host_permissions": [
     "*://*/*"

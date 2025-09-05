@@ -56,27 +56,41 @@ class SimpleRecorder {
 
   // 开始录音
   async startRecording() {
+    console.log('SimpleRecorder: 开始录音流程')
+    
     if (this.isRecording) {
       throw new Error('已在录音中')
     }
 
     if (!this.stream) {
+      console.log('SimpleRecorder: 需要请求麦克风权限')
       await this.requestPermissionAndStart()
+    } else {
+      console.log('SimpleRecorder: 使用现有音频流')
     }
 
+    console.log('SimpleRecorder: 初始化MediaRecorder')
     this.chunks = []
-    this.mediaRecorder = new MediaRecorder(this.stream, {
-      mimeType: 'audio/webm;codecs=opus'
-    })
+    
+    try {
+      this.mediaRecorder = new MediaRecorder(this.stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      })
+      console.log('SimpleRecorder: MediaRecorder创建成功')
+    } catch (error) {
+      console.error('SimpleRecorder: MediaRecorder创建失败:', error)
+      throw new Error(`MediaRecorder创建失败: ${error.message}`)
+    }
 
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
+        console.log('SimpleRecorder: 接收到音频数据块:', event.data.size, 'bytes')
         this.chunks.push(event.data)
       }
     }
 
     this.mediaRecorder.onstart = () => {
-      console.log('录音开始')
+      console.log('SimpleRecorder: MediaRecorder已启动')
       this.isRecording = true
       this.isPaused = false
     }
@@ -92,12 +106,24 @@ class SimpleRecorder {
     }
 
     this.mediaRecorder.onstop = () => {
-      console.log('录音停止')
+      console.log('SimpleRecorder: MediaRecorder已停止')
       this.isRecording = false
       this.isPaused = false
     }
 
-    this.mediaRecorder.start(1000) // 每秒收集一次数据
+    this.mediaRecorder.onerror = (event) => {
+      console.error('SimpleRecorder: MediaRecorder错误:', event.error)
+    }
+
+    console.log('SimpleRecorder: 准备启动MediaRecorder...')
+    try {
+      this.mediaRecorder.start(1000) // 每秒收集一次数据
+      console.log('SimpleRecorder: MediaRecorder.start()调用成功')
+    } catch (error) {
+      console.error('SimpleRecorder: MediaRecorder.start()调用失败:', error)
+      throw error
+    }
+    
     return true
   }
 
