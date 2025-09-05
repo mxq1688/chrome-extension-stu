@@ -39,6 +39,13 @@
             </span>
           </button>
         </div>
+        
+        <!-- 权限重置按钮 -->
+        <div class="permission-reset">
+          <button @click="resetPermissions" class="reset-btn" title="解决麦克风权限问题">
+            🔧 权限问题？点击获取解决方案
+          </button>
+        </div>
       </div>
 
       <!-- 保存录音对话框 -->
@@ -92,6 +99,38 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanup()
 })
+
+// 权限重置功能
+async function resetPermissions() {
+  console.log('🔄 尝试重置麦克风权限...')
+  
+  try {
+    // 显示详细的权限重置指导
+    const resetInstructions = `🚨 权限重置指导：
+
+📍 方法1 - 扩展界面：
+1️⃣ 看地址栏左侧的 🔒 图标
+2️⃣ 点击它，找到 "麦克风"
+3️⃣ 改为 "允许"
+
+📍 方法2 - Chrome设置：
+1️⃣ 新标签页输入: chrome://settings/content/microphone
+2️⃣ 删除 "阻止" 列表中的此扩展
+3️⃣ 重新尝试录音
+
+📍 方法3 - 重装扩展：
+1️⃣ chrome://extensions/ 删除此扩展
+2️⃣ 重新加载扩展文件夹
+3️⃣ 首次使用选择 "允许"
+
+🎯 完成后点击录音按钮测试！`
+    
+    alert(resetInstructions)
+    
+  } catch (error) {
+    console.error('权限重置失败:', error)
+  }
+}
 
 // 统一的录音控制函数
 async function toggleRecording() {
@@ -447,5 +486,35 @@ function cleanup() {
 
 .btn-secondary:hover:not(:disabled) {
   background: #7f8c8d;
+}
+
+/* 权限重置按钮样式 */
+.permission-reset {
+  margin-top: 15px;
+  text-align: center;
+}
+
+.reset-btn {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+  font-weight: 500;
+}
+
+.reset-btn:hover {
+  background: linear-gradient(135deg, #c0392b, #a93226);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.reset-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
 }
 </style>
