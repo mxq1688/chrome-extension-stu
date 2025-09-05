@@ -114,7 +114,7 @@ async function handleMicrophonePermissionRequest() {
     
     switch (error.name) {
       case 'NotAllowedError':
-        errorMessage = '用户拒绝了麦克风权限，请点击地址栏的麦克风图标允许访问'
+        errorMessage = '麦克风权限被拒绝\n请点击地址栏的🔒图标允许麦克风访问'
         break
       case 'NotFoundError':
         errorMessage = '未检测到麦克风设备，请连接麦克风后重试'
