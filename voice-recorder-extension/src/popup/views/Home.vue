@@ -1,17 +1,7 @@
 <template>
   <div class="home">
-    <!-- 权限提示 -->
-    <div v-if="!store.hasPermission && !isCheckingPermission" class="permission-card card">
-      <div class="permission-icon">🎤</div>
-      <h3>需要麦克风权限</h3>
-      <p class="text-muted">请允许访问麦克风以开始录音</p>
-      <button @click="openPermissionHelper" class="btn btn-primary">
-        🔓 授权麦克风
-      </button>
-    </div>
-
     <!-- 录音控制区域 -->
-    <div v-else class="recording-section">
+    <div class="recording-section">
       <!-- 录音状态显示 -->
       <div class="recording-status card text-center">
         <div class="recording-visual">
@@ -122,7 +112,6 @@ const store = useRecorderStore()
 const recorder = new SimpleRecorder()
 
 // 响应式数据
-const isCheckingPermission = ref(true)
 const isProcessing = ref(false)
 const recordingTimer = ref(null)
 const showSaveDialog = ref(false)
@@ -131,9 +120,8 @@ const recordingName = ref('')
 const recordingData = ref(null)
 const nameInput = ref(null)
 
-// 组件挂载时检查权限
+// 组件挂载时初始化
 onMounted(async () => {
-  await checkInitialPermission()
   await store.loadFromStorage()
 })
 
@@ -142,36 +130,7 @@ onUnmounted(() => {
   cleanup()
 })
 
-// 检查初始权限状态
-async function checkInitialPermission() {
-  try {
-    isCheckingPermission.value = true
-    
-    // 检查麦克风权限状态
-    const permissionState = await recorder.checkPermission()
-    
-    if (permissionState === 'granted') {
-      store.setPermission(true, '')
-    } else {
-      store.setPermission(false, '')
-    }
-  } catch (error) {
-    console.error('权限检查错误:', error)
-    store.setPermission(false)
-  } finally {
-    isCheckingPermission.value = false
-  }
-}
 
-
-
-// 打开权限帮助页面
-function openPermissionHelper() {
-  // 在新标签页中打开权限帮助页面
-  chrome.tabs.create({
-    url: chrome.runtime.getURL('permission-helper.html')
-  })
-}
 
 // 开始录音
 async function startRecording() {
@@ -356,27 +315,7 @@ function cleanup() {
   border: 1px solid #e1e5e9;
 }
 
-.permission-card {
-  text-align: center;
-  padding: 40px 20px;
-}
 
-.permission-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.permission-card h3 {
-  margin: 0 0 8px 0;
-  color: #2c3e50;
-  font-size: 20px;
-}
-
-.text-muted {
-  color: #7f8c8d;
-  font-size: 14px;
-  margin-bottom: 24px;
-}
 
 .btn {
   padding: 12px 24px;
@@ -428,78 +367,7 @@ function cleanup() {
   font-size: 16px;
 }
 
-.error-text {
-  color: #e74c3c;
-  font-size: 13px;
-  line-height: 1.4;
-}
 
-.mt-8 {
-  margin-top: 8px;
-}
-
-.mt-16 {
-  margin-top: 16px;
-}
-
-.page-support-warning {
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-
-.warning-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-title {
-  font-weight: 600;
-  color: #856404;
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-
-.warning-message {
-  color: #856404;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.suggestions {
-  margin-top: 8px;
-}
-
-.suggestions-title {
-  font-weight: 600;
-  color: #856404;
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-
-.suggestions-list {
-  margin: 0;
-  padding-left: 16px;
-  color: #856404;
-  font-size: 11px;
-  line-height: 1.3;
-}
-
-.suggestions-list li {
-  margin-bottom: 2px;
-}
-
-.mt-16 {
-  margin-top: 16px;
-}
 
 .recording-section {
   display: flex;
