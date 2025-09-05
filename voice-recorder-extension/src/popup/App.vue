@@ -95,9 +95,16 @@ onUnmounted(() => {
 
 // 统一的录音控制函数
 async function toggleRecording() {
-  if (isProcessing.value) return
+  console.log('🎤 toggleRecording函数被调用！')
+  console.log('当前状态 - isProcessing:', isProcessing.value, 'isRecording:', store.isRecording, 'isPaused:', store.isPaused)
+  
+  if (isProcessing.value) {
+    console.log('❌ 正在处理中，忽略点击')
+    return
+  }
   
   try {
+    console.log('✅ 开始处理录音操作...')
     isProcessing.value = true
     
     if (!store.isRecording) {
