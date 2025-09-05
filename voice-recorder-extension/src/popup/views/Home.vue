@@ -9,6 +9,12 @@
         <span v-if="isRequestingPermission">请求中...</span>
         <span v-else>🔓 授权麦克风</span>
       </button>
+      
+      <!-- 权限帮助按钮 -->
+      <button v-if="store.permissionError" @click="openPermissionHelper" class="btn btn-secondary mt-8">
+        🆘 权限帮助
+      </button>
+      
       <div v-if="store.permissionError" class="error-text mt-16">
         {{ store.permissionError }}
       </div>
@@ -184,19 +190,52 @@ async function requestPermission() {
       throw new Error('您的浏览器不支持录音功能')
     }
     
-    // 直接请求麦克风权限
-    await recorder.requestPermissionAndStart()
-    
-    // 权限获取成功
-    store.setPermission(true)
-    console.log('麦克风权限获取成功')
-    
-    // 显示成功通知
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('录音助手', {
-        body: '麦克风权限已授权，可以开始录音了！',
-        icon: 'icons/icon48.png'
-      })
+    // 方法1: 尝试直接在popup中请求权限
+    try {
+      console.log('尝试直接请求权限...')
+      await recorder.requestPermissionAndStart()
+      
+      // 权限获取成功
+      store.setPermission(true)
+      console.log('麦克风权限获取成功')
+      
+      // 显示成功通知
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('录音助手', {
+          body: '麦克风权限已授权，可以开始录音了！',
+          icon: 'icons/icon48.png'
+        })
+      }
+      return
+    } catch (directError) {
+      console.log('直接请求失败，尝试通过content script...', directError)
+      
+      // 方法2: 通过content script请求权限
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (tab && tab.id) {
+          // 注入content script并请求权限
+          await chrome.tabs.sendMessage(tab.id, {
+            type: 'REQUEST_MICROPHONE_PERMISSION'
+          })
+          
+          // 等待一下让用户看到权限对话框
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          // 重新检查权限状态
+          const permissionState = await recorder.checkPermission()
+          if (permissionState === 'granted') {
+            store.setPermission(true)
+            console.log('通过content script获取权限成功')
+            return
+          }
+        }
+      } catch (contentError) {
+        console.log('Content script方式也失败了:', contentError)
+      }
+      
+      // 如果都失败了，抛出原始错误
+      throw directError
     }
     
   } catch (error) {
@@ -206,18 +245,28 @@ async function requestPermission() {
     
     // 显示详细的错误提示
     let userFriendlyMessage = error.message
-    if (error.message.includes('NotAllowedError') || error.message.includes('用户拒绝')) {
-      userFriendlyMessage = '请在浏览器地址栏左侧点击麦克风图标，选择"始终允许"，然后刷新页面。'
+    if (error.message.includes('NotAllowedError') || error.message.includes('拒绝') || error.message.includes('denied')) {
+      userFriendlyMessage = '麦克风权限被拒绝\n\n解决方法：\n1. 点击浏览器地址栏左侧的🔒图标\n2. 将"麦克风"设置为"允许"\n3. 刷新页面后重试'
     } else if (error.message.includes('NotFoundError')) {
-      userFriendlyMessage = '未检测到麦克风设备，请检查您的麦克风是否正确连接。'
+      userFriendlyMessage = '未检测到麦克风设备\n请检查您的麦克风是否正确连接'
     } else if (error.message.includes('NotReadableError')) {
-      userFriendlyMessage = '麦克风被其他程序占用，请关闭其他使用麦克风的程序后重试。'
+      userFriendlyMessage = '麦克风被其他程序占用\n请关闭其他使用麦克风的程序后重试'
+    } else if (error.message.includes('popup')) {
+      userFriendlyMessage = '在扩展中请求权限受限\n\n请按以下步骤操作：\n1. 打开任意网页\n2. 点击地址栏的🔒图标\n3. 允许麦克风访问\n4. 回到扩展重试'
     }
     
     store.setPermission(false, userFriendlyMessage)
   } finally {
     isRequestingPermission.value = false
   }
+}
+
+// 打开权限帮助页面
+function openPermissionHelper() {
+  // 在新标签页中打开权限帮助页面
+  chrome.tabs.create({
+    url: chrome.runtime.getURL('permission-helper.html')
+  })
 }
 
 // 开始录音
@@ -479,6 +528,14 @@ function cleanup() {
   color: #e74c3c;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.mt-8 {
+  margin-top: 8px;
+}
+
+.mt-16 {
+  margin-top: 16px;
 }
 
 .page-support-warning {
