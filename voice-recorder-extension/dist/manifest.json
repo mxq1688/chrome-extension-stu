@@ -9,6 +9,7 @@
     "scripting",
     "tabs",
     "downloads",
+    "tabCapture",
     "notifications"
   ],
   "host_permissions": [

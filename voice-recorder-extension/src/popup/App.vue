@@ -10,43 +10,9 @@
     </header>
     
     <main class="main">
-      <div class="recording-container">
-        <!-- 录音状态显示 -->
-        <div class="recording-status">
-          <div class="recording-time">{{ store.formattedRecordingTime }}</div>
-        </div>
-
-        <!-- 单一录音按钮 -->
-        <div class="recording-control">
-          <button 
-            @click="toggleRecording" 
-            :disabled="isProcessing" 
-            class="record-btn"
-            :class="{
-              'recording': store.isRecording && !store.isPaused,
-              'paused': store.isPaused
-            }"
-          >
-            <span class="btn-icon">
-              <span v-if="!store.isRecording">🎤</span>
-              <span v-else-if="store.isPaused">▶️</span>
-              <span v-else>⏹️</span>
-            </span>
-            <span class="btn-text">
-              <span v-if="!store.isRecording">开始录音</span>
-              <span v-else-if="store.isPaused">继续录音</span>
-              <span v-else>停止录音</span>
-            </span>
-          </button>
-        </div>
-        
-        <!-- 权限重置按钮 -->
-        <div class="permission-reset">
-          <button @click="resetPermissions" class="reset-btn" title="解决麦克风权限问题">
-            🔧 权限问题？点击获取解决方案
-          </button>
-        </div>
-      </div>
+      <transition name="slide-fade" mode="out-in">
+        <router-view />
+      </transition>
 
       <!-- 保存录音对话框 -->
       <div v-if="showSaveDialog" class="save-dialog-overlay" @click="closeSaveDialog">
@@ -71,6 +37,12 @@
         </div>
       </div>
     </main>
+    
+    <!-- 底部切换导航 -->
+    <nav class="bottom-nav">
+      <button :class="{active: $route.path === '/record'}" @click="$router.push('/record')"><span class="nav-ico">🎙️</span><span>录音</span></button>
+      <button :class="{active: $route.path === '/list'}" @click="$router.push('/list')"><span class="nav-ico">📂</span><span>列表</span></button>
+    </nav>
   </div>
 </template>
 
@@ -78,6 +50,7 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRecorderStore } from './store'
 import SimpleRecorder from '../utils/simpleRecorder'
+import lamejs from 'lamejs'
 
 const store = useRecorderStore()
 const recorder = new SimpleRecorder()
@@ -89,48 +62,30 @@ const showSaveDialog = ref(false)
 const recordingName = ref('')
 const recordingData = ref(null)
 const nameInput = ref(null)
+const level = ref(0)
+const vizCanvas = ref(null)
+let vizRaf = null
+
+function setSource(src) {
+  store.updateSettings({ inputSource: src })
+}
+
+function updateSetting(key, val) {
+  store.updateSettings({ [key]: val })
+}
 
 // 组件挂载时初始化
 onMounted(async () => {
   await store.loadFromStorage()
 })
 
+
 // 组件卸载时清理资源
 onUnmounted(() => {
   cleanup()
 })
 
-// 权限重置功能
-async function resetPermissions() {
-  console.log('🔄 尝试重置麦克风权限...')
-  
-  try {
-    // 显示详细的权限重置指导
-    const resetInstructions = `🚨 权限重置指导：
 
-📍 方法1 - 扩展界面：
-1️⃣ 看地址栏左侧的 🔒 图标
-2️⃣ 点击它，找到 "麦克风"
-3️⃣ 改为 "允许"
-
-📍 方法2 - Chrome设置：
-1️⃣ 新标签页输入: chrome://settings/content/microphone
-2️⃣ 删除 "阻止" 列表中的此扩展
-3️⃣ 重新尝试录音
-
-📍 方法3 - 重装扩展：
-1️⃣ chrome://extensions/ 删除此扩展
-2️⃣ 重新加载扩展文件夹
-3️⃣ 首次使用选择 "允许"
-
-🎯 完成后点击录音按钮测试！`
-    
-    alert(resetInstructions)
-    
-  } catch (error) {
-    console.error('权限重置失败:', error)
-  }
-}
 
 // 统一的录音控制函数
 async function toggleRecording() {
@@ -148,10 +103,12 @@ async function toggleRecording() {
     
     if (!store.isRecording) {
       // 开始录音
-      await recorder.startRecording()
+      await recorder.startRecording(store.settings?.inputSource || 'mix')
       store.setRecordingState(true, false)
       startTimer()
       console.log('录音开始')
+      recorder.onLevel(v => level.value = v)
+      startVisualizer()
     } else if (store.isPaused) {
       // 继续录音
       await recorder.resumeRecording()
@@ -168,9 +125,7 @@ async function toggleRecording() {
       
       console.log('录音停止', audioData)
       
-      // 显示保存对话框
-      showSaveDialog.value = true
-      recordingName.value = `录音_${new Date().toLocaleString('zh-CN', {
+      const defaultName = `录音_${new Date().toLocaleString('zh-CN', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -178,17 +133,94 @@ async function toggleRecording() {
         minute: '2-digit'
       }).replace(/[\s/:]/g, '_')}`
       
+      // 若开启自动保存，则直接保存；否则弹出命名对话框
+      if (store.settings && store.settings.autoSave) {
+        await saveRecordingDirect(defaultName)
+      } else {
+        showSaveDialog.value = true
+        recordingName.value = defaultName
       await nextTick()
       if (nameInput.value) {
         nameInput.value.focus()
         nameInput.value.select()
+        }
       }
     }
   } catch (error) {
     console.error('录音操作失败:', error)
-    store.setPermission(false, `录音操作失败: ${error.message}`)
+    // 如果是用户关闭/忽略授权导致的 NotAllowedError: Permission dismissed，则引导到固定页授权
+    const isDismissed = (error && error.name === 'NotAllowedError' && (error._dismissed === true || /Permission dismissed/i.test(String(error.message))))
+    if (isDismissed && typeof chrome !== 'undefined') {
+      try {
+        const helperUrl = chrome.runtime?.getURL ? chrome.runtime.getURL('permission-helper.html') : 'permission-helper.html'
+        console.log('尝试打开权限助手页:', helperUrl)
+        if (chrome?.tabs?.create) {
+          chrome.tabs.create({ url: helperUrl, active: true }, (tab) => {
+            if (chrome.runtime.lastError) {
+              console.warn('tabs.create 失败，尝试 windows.create:', chrome.runtime.lastError)
+              if (chrome?.windows?.create) {
+                chrome.windows.create({ url: helperUrl, focused: true, type: 'popup' }, () => {
+                  window.close()
+                })
+              }
+            } else {
+              window.close()
+            }
+          })
+          return
+        } else if (chrome?.windows?.create) {
+          chrome.windows.create({ url: helperUrl, focused: true, type: 'popup' }, () => {
+            window.close()
+          })
+          return
+        }
+      } catch (e) {
+        console.error('打开权限助手页失败:', e)
+      }
+    }
   } finally {
     isProcessing.value = false
+  }
+}
+
+function startVisualizer() {
+  stopVisualizer()
+  const canvas = vizCanvas.value
+  if (!canvas || !recorder.analyser) return
+  const ctx = canvas.getContext('2d')
+  const analyser = recorder.analyser
+  const bufferLength = analyser.frequencyBinCount
+  const dataArray = new Uint8Array(bufferLength)
+  const bars = 32
+  const gap = 3
+  const draw = () => {
+    analyser.getByteFrequencyData(dataArray)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    const barWidth = (canvas.width - (bars - 1) * gap) / bars
+    for (let i = 0; i < bars; i++) {
+      const idx = Math.floor(i * (bufferLength / bars))
+      const v = dataArray[idx] / 255
+      const h = Math.max(2, v * canvas.height)
+      const x = i * (barWidth + gap)
+      const y = canvas.height - h
+      const grd = ctx.createLinearGradient(0, y, 0, canvas.height)
+      grd.addColorStop(0, '#55efc4')
+      grd.addColorStop(1, '#ff7675')
+      ctx.fillStyle = grd
+      ctx.fillRect(x, y, barWidth, h)
+      ctx.roundRect?.(x, y, barWidth, h, 4)
+    }
+    vizRaf = requestAnimationFrame(draw)
+  }
+  vizRaf = requestAnimationFrame(draw)
+}
+
+function stopVisualizer() {
+  if (vizRaf) { cancelAnimationFrame(vizRaf); vizRaf = null }
+  const canvas = vizCanvas.value
+  if (canvas) {
+    const ctx = canvas.getContext('2d')
+    ctx && ctx.clearRect(0, 0, canvas.width, canvas.height)
   }
 }
 
@@ -197,28 +229,221 @@ async function saveRecording() {
   if (!recordingData.value || !recordingName.value.trim()) return
   
   try {
+    await saveRecordingDirect(recordingName.value.trim())
+  } catch (error) {
+    console.error('保存录音失败:', error)
+  }
+}
+
+// 直接保存（用于自动保存和命名确认后保存）
+async function saveRecordingDirect(name) {
+  if (!recordingData.value) return
     const recording = {
-      name: recordingName.value.trim(),
+    name,
       duration: store.recordingTime,
       size: recordingData.value.size,
       audioUrl: recordingData.value.url,
       audioBlob: recordingData.value.blob
     }
-    
     store.addRecording(recording)
     console.log('录音已保存:', recording.name)
-    
+  // 触发下载
+  try {
+    await downloadRecording(recording)
+  } catch (e) {
+    console.error('下载录音失败:', e)
+  }
     closeSaveDialog()
-    
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('录音助手', {
         body: `录音 "${recording.name}" 已保存`,
         icon: 'icons/icon48.png'
       })
     }
-  } catch (error) {
-    console.error('保存录音失败:', error)
+}
+
+// 触发下载
+async function downloadRecording(recording) {
+  const safeName = `${(recording.name || '录音').replace(/[^\w\u4e00-\u9fa5\-_. ]+/g, '_')}.webm`
+  const url = recording.audioUrl
+  // 优先使用 chrome.downloads.download
+  if (typeof chrome !== 'undefined' && chrome?.downloads?.download) {
+    try {
+      await chrome.downloads.download({
+        url,
+        filename: `recordings/${safeName}`,
+        saveAs: true
+      })
+      return
+    } catch (err) {
+      console.warn('chrome.downloads.download 失败，使用 <a> 兜底:', err)
+    }
   }
+  // 兜底：使用 a[download]
+  const a = document.createElement('a')
+  a.href = url
+  a.download = safeName
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => {
+    document.body.removeChild(a)
+  }, 0)
+}
+
+// 下载为 WEBM（原始）
+function downloadWebm(rec) {
+  const url = rec.audioUrl || (rec.audioBlob ? URL.createObjectURL(rec.audioBlob) : '')
+  if (!url) return
+  downloadByUrl(url, `${sanitize(rec.name)}.webm`)
+}
+
+// 下载为 WAV
+async function downloadWav(rec) {
+  if (!rec.audioBlob) return downloadWebm(rec)
+  const arrayBuffer = await rec.audioBlob.arrayBuffer()
+  const audioBuffer = await decodeAudio(arrayBuffer)
+  const wavBlob = encodeWav(audioBuffer)
+  const url = URL.createObjectURL(wavBlob)
+  downloadByUrl(url, `${sanitize(rec.name)}.wav`)
+}
+
+// 下载为 MP3（lamejs）
+async function downloadMp3(rec) {
+  if (!rec.audioBlob) return downloadWebm(rec)
+  const arrayBuffer = await rec.audioBlob.arrayBuffer()
+  const audioBuffer = await decodeAudio(arrayBuffer)
+  const mp3Blob = encodeMp3(audioBuffer)
+  const url = URL.createObjectURL(mp3Blob)
+  downloadByUrl(url, `${sanitize(rec.name)}.mp3`)
+}
+
+function downloadByUrl(url, filename) {
+  if (typeof chrome !== 'undefined' && chrome?.downloads?.download) {
+    chrome.downloads.download({ url, filename: makePath(filename), saveAs: true }, () => {})
+  } else {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    setTimeout(() => document.body.removeChild(a), 0)
+  }
+}
+
+function sanitize(name) {
+  return (name || '录音').replace(/[^\w\u4e00-\u9fa5\-_. ]+/g, '_')
+}
+
+function makePath(filename) {
+  const dir = store?.settings?.downloadDir || 'recordings'
+  return `${dir}/${filename}`
+}
+
+async function decodeAudio(arrayBuffer) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)()
+  return await ctx.decodeAudioData(arrayBuffer)
+}
+
+function encodeWav(audioBuffer) {
+  const numChannels = audioBuffer.numberOfChannels
+  const sampleRate = audioBuffer.sampleRate
+  const samples = interleaveChannels(audioBuffer)
+  const wavBuffer = encodeWavBuffer(samples, numChannels, sampleRate)
+  return new Blob([wavBuffer], { type: 'audio/wav' })
+}
+
+function interleaveChannels(audioBuffer) {
+  const numChannels = audioBuffer.numberOfChannels
+  const length = audioBuffer.length * numChannels
+  const result = new Float32Array(length)
+  for (let ch = 0; ch < numChannels; ch++) {
+    const data = audioBuffer.getChannelData(ch)
+    for (let i = 0; i < audioBuffer.length; i++) {
+      result[i * numChannels + ch] = data[i]
+    }
+  }
+  return result
+}
+
+function encodeWavBuffer(samples, numChannels, sampleRate) {
+  const bytesPerSample = 2
+  const blockAlign = numChannels * bytesPerSample
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample)
+  const view = new DataView(buffer)
+
+  writeString(view, 0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true)
+  writeString(view, 8, 'WAVE')
+  writeString(view, 12, 'fmt ')
+  view.setUint32(16, 16, true) // PCM chunk size
+  view.setUint16(20, 1, true) // PCM format
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * blockAlign, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bytesPerSample * 8, true)
+  writeString(view, 36, 'data')
+  view.setUint32(40, samples.length * bytesPerSample, true)
+
+  floatTo16BitPCM(view, 44, samples)
+  return view
+}
+
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i))
+  }
+}
+
+function floatTo16BitPCM(view, offset, input) {
+  for (let i = 0; i < input.length; i++, offset += 2) {
+    let s = Math.max(-1, Math.min(1, input[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+  }
+}
+
+function encodeMp3(audioBuffer) {
+  const numChannels = audioBuffer.numberOfChannels
+  const sampleRate = audioBuffer.sampleRate
+  const mp3encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, 128)
+  const samples = []
+  for (let ch = 0; ch < numChannels; ch++) {
+    samples.push(audioBuffer.getChannelData(ch))
+  }
+  const left = samples[0]
+  const right = numChannels > 1 ? samples[1] : samples[0]
+  const blockSize = 1152
+  let mp3Data = []
+  for (let i = 0; i < left.length; i += blockSize) {
+    const leftChunk = floatTo16(left.subarray(i, i + blockSize))
+    const rightChunk = floatTo16(right.subarray(i, i + blockSize))
+    const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk)
+    if (mp3buf.length > 0) mp3Data.push(new Int8Array(mp3buf))
+  }
+  const end = mp3encoder.flush()
+  if (end.length > 0) mp3Data.push(new Int8Array(end))
+  return new Blob(mp3Data, { type: 'audio/mpeg' })
+}
+
+function floatTo16(float32Array) {
+  const buf = new Int16Array(float32Array.length)
+  for (let i = 0; i < float32Array.length; i++) {
+    let s = Math.max(-1, Math.min(1, float32Array[i]))
+    buf[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+  }
+  return buf
+}
+
+// 辅助：格式化
+function formatSize(size) {
+  const s = Number(size || 0)
+  if (s < 1024) return `${s} B`
+  if (s < 1024 * 1024) return `${(s / 1024).toFixed(1)} KB`
+  return `${(s / 1024 / 1024).toFixed(2)} MB`
+}
+
+function formatDate(iso) {
+  try { return new Date(iso).toLocaleString('zh-CN') } catch { return '' }
 }
 
 // 关闭保存对话框
@@ -258,6 +483,7 @@ function stopTimer() {
 function cleanup() {
   stopTimer()
   recorder.cleanup()
+  stopVisualizer()
 }
 </script>
 
@@ -317,6 +543,19 @@ function cleanup() {
   margin-bottom: 30px;
 }
 
+.source-toggle { display: flex; gap: 8px; justify-content: center; margin: 6px 0 18px; }
+.toggle-btn {
+  padding: 6px 10px; border-radius: 999px; border: 1px solid #dfe6e9; background: #fff; color: #2d3436; font-size: 12px; cursor: pointer; transition: all .2s ease;
+}
+.toggle-btn:hover { box-shadow: 0 4px 10px rgba(0,0,0,.06); }
+.toggle-btn.active { background: #3498db; color: #fff; border-color: #3498db; }
+
+.audio-controls { display:flex; gap:12px; justify-content:center; margin: 6px 0; flex-wrap: wrap; }
+.audio-controls .switch { font-size: 12px; color: #2d3436; display:flex; align-items:center; gap:6px; }
+.gain-row { display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom: 12px; }
+.gain { width: 160px; }
+.gain-val { font-size: 12px; color:#636e72; }
+
 .recording-time {
   font-size: 32px;
   font-weight: 700;
@@ -324,6 +563,10 @@ function cleanup() {
   margin-bottom: 8px;
   font-family: 'Monaco', 'Consolas', monospace;
 }
+
+.level-bar { height: 8px; background: #ecf0f1; border-radius: 999px; overflow: hidden; width: 220px; margin: 0 auto 8px; }
+.level-bar span { display: block; height: 100%; background: linear-gradient(90deg, #55efc4, #ff7675); width: 0%; transition: width .08s ease; }
+.level-visualizer { display: block; margin: 4px auto 0; width: 260px; height: 48px; }
 
 .recording-control {
   display: flex;
@@ -488,33 +731,97 @@ function cleanup() {
   background: #7f8c8d;
 }
 
-/* 权限重置按钮样式 */
-.permission-reset {
-  margin-top: 15px;
-  text-align: center;
+ 
+/* 列表样式 */
+.list-section {
+  padding: 0 20px 24px;
 }
 
-.reset-btn {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 20px;
+.list-title {
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.recordings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.record-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+
+.rec-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rec-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #74b9ff, #a29bfe);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(116,185,255,.35);
+}
+
+.rec-info { min-width: 0; }
+.rec-name {
+  font-weight: 600;
+  color: #2d3436;
+  font-size: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.rec-meta {
+  margin-top: 2px;
+  color: #7f8c8d;
   font-size: 12px;
+}
+.rec-meta .dot { margin: 0 6px; }
+
+.rec-actions { display: flex; gap: 8px; }
+.pill {
+  border: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
-  font-weight: 500;
+  transition: transform .15s ease, box-shadow .2s ease;
 }
+.pill:hover { transform: translateY(-1px); }
+.pill-webm { background: #dfe6e9; color: #2d3436; }
+.pill-wav { background: #ffeaa7; color: #6d4c41; }
+.pill-mp3 { background: #55efc4; color: #00695c; }
+.pill-webm:hover { box-shadow: 0 4px 12px rgba(99,110,114,0.25); }
+.pill-wav:hover { box-shadow: 0 4px 12px rgba(255,234,167,0.45); }
+.pill-mp3:hover { box-shadow: 0 4px 12px rgba(85,239,196,0.45); }
 
-.reset-btn:hover {
-  background: linear-gradient(135deg, #c0392b, #a93226);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
-}
+.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: #fff; box-shadow: 0 -4px 14px rgba(0,0,0,.06); display:flex; justify-content:center; gap:12px; }
+.bottom-nav button { border: none; padding: 8px 16px; border-radius: 999px; background: #ecf0f1; color: #2d3436; font-weight:600; cursor:pointer; min-width: 96px; }
+.bottom-nav button.active { background: #3498db; color: #fff; }
+.bottom-nav .nav-ico { margin-right: 6px; }
 
-.reset-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(231, 76, 60, 0.3);
-}
+/* 过渡动画 */
+.slide-fade-enter-active { transition: all .25s ease; }
+.slide-fade-leave-active { transition: all .2s ease; }
+.slide-fade-enter-from { opacity: 0; transform: translateY(8px); }
+.slide-fade-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

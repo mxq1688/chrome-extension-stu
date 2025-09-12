@@ -3,9 +3,15 @@ class SimpleRecorder {
   constructor() {
     this.mediaRecorder = null
     this.stream = null
+    this.micStream = null
+    this.tabStream = null
     this.chunks = []
     this.isRecording = false
     this.isPaused = false
+    this.audioContext = null
+    this.analyser = null
+    this.levelDataArray = null
+    this.levelCallback = null
   }
 
   // 检查浏览器支持
@@ -13,52 +19,72 @@ class SimpleRecorder {
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)
   }
 
-  // 强制请求麦克风权限并开始录音
-  async requestPermissionAndStart() {
+  // 获取麦克风输入
+  async requestPermissionAndStart(inputSource = 'mix') {
     if (!this.isSupported()) {
       throw new Error('您的浏览器不支持录音功能')
     }
 
+    console.log('🎤 正在获取麦克风输入...')
+    
     try {
-      console.log('🚨 强制重新请求麦克风权限...')
-      
-      // 1. 先检查当前权限状态
-      if ('permissions' in navigator) {
-        try {
-          const permission = await navigator.permissions.query({ name: 'microphone' })
-          console.log('📋 当前麦克风权限状态:', permission.state)
-          
-          if (permission.state === 'denied') {
-            console.log('🔴 权限被拒绝，但仍尝试强制请求...')
-          }
-        } catch (permError) {
-          console.log('⚠️ 无法查询权限状态:', permError.message)
+      // 麦克风（按需）
+      if (inputSource === 'mic' || inputSource === 'mix') {
+        this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100
         }
-      }
-      
-      // 2. 多次尝试获取权限
-      console.log('🎤 开始getUserMedia请求...')
-      
-      // 第一次尝试 - 完整配置
-      try {
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-            sampleRate: 44100
-          }
-        })
-      } catch (firstError) {
-        console.log('🔄 第一次请求失败，尝试简化配置...')
-        
-        // 第二次尝试 - 简化配置
-        this.stream = await navigator.mediaDevices.getUserMedia({
-          audio: true
         })
       }
 
-      console.log('✅ 麦克风权限获取成功！')
+      // 标签页音频（按需）
+      if (inputSource === 'tab' || inputSource === 'mix') {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { mandatory: { chromeMediaSource: 'tab' } }
+          })
+          this.tabStream = stream
+        } catch (e) {
+          console.warn('获取标签页音频失败:', e)
+        }
+      }
+
+      // 选择输出
+      if (inputSource === 'tab') {
+        this.stream = this.tabStream || this.micStream
+      } else if (inputSource === 'mic') {
+        this.stream = this.micStream || this.tabStream
+      } else if (this.tabStream && this.micStream) {
+        // 混音（AudioContext 合成）
+        const ctx = new (window.AudioContext || window.webkitAudioContext)()
+        const dest = ctx.createMediaStreamDestination()
+        const sources = []
+        sources.push(ctx.createMediaStreamSource(this.micStream)); sources[sources.length - 1].connect(dest)
+        sources.push(ctx.createMediaStreamSource(this.tabStream)); sources[sources.length - 1].connect(dest)
+        this.stream = dest.stream
+        this.audioContext = ctx
+      } else {
+        this.stream = this.micStream || this.tabStream
+      }
+
+      // 建立电平分析（优先从最终输出流）
+      try {
+        const ctx = this.audioContext || new (window.AudioContext || window.webkitAudioContext)()
+        const source = ctx.createMediaStreamSource(this.stream)
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 256
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+        source.connect(analyser)
+        this.analyser = analyser
+        this.levelDataArray = dataArray
+        this.audioContext = ctx
+      } catch {}
+
+      console.log('✅ 录音输入已就绪')
       console.log('🔊 音频轨道信息:', this.stream.getAudioTracks().map(track => ({
         label: track.label,
         enabled: track.enabled,
@@ -66,64 +92,18 @@ class SimpleRecorder {
       })))
       
       return true
-
     } catch (error) {
-      console.error('❌ 麦克风权限请求彻底失败:', error)
-      console.error('📊 错误详细信息:', {
-        name: error.name,
-        message: error.message,
-        constraint: error.constraint || 'N/A',
-        stack: error.stack
-      })
-      
-      let errorMessage = '💥 无法访问麦克风'
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage = `🚨 麦克风权限被拒绝！
-
-🔧 立即解决方案：
-1️⃣ 点击地址栏左侧的 🔒 或 ⚠️ 图标
-2️⃣ 找到 "麦克风" 选项
-3️⃣ 从 "阻止" 改为 "允许"
-4️⃣ 刷新此页面重试
-
-🌐 备用方案：
-1️⃣ 打开新标签页输入: chrome://settings/content/microphone
-2️⃣ 在 "阻止" 列表中删除此扩展
-3️⃣ 重新尝试录音，选择 "允许"
-
-💡 如果仍无效，请重启浏览器后重试！`
-      } else if (error.name === 'NotFoundError') {
-        errorMessage = `🎤 未检测到麦克风设备！
-
-🔍 请检查：
-1️⃣ 麦克风是否已连接
-2️⃣ 系统声音设置是否正常
-3️⃣ 其他应用能否使用麦克风
-4️⃣ Windows声音设置中是否启用了麦克风`
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = `🔒 麦克风被其他程序占用！
-
-🛑 请关闭：
-1️⃣ 其他录音软件
-2️⃣ 视频会议应用（腾讯会议、钉钉等）
-3️⃣ 语音助手或语音识别软件
-4️⃣ 其他浏览器标签页的录音功能`
-      } else if (error.name === 'OverconstrainedError') {
-        errorMessage = `⚙️ 麦克风不支持所需的音频格式！
-
-🔧 可能的解决方案：
-1️⃣ 更新音频驱动程序
-2️⃣ 尝试使用其他麦克风设备
-3️⃣ 检查系统音频设置`
+      console.error('❌ 获取麦克风失败:', error)
+      // 直接抛出原始错误，保留 name 与 message，额外标记 dismissed 场景
+      if (error && error.name === 'NotAllowedError') {
+        error._dismissed = /dismissed/i.test(String(error.message))
       }
-      
-      throw new Error(errorMessage)
+      throw error
     }
   }
 
   // 开始录音
-  async startRecording() {
+  async startRecording(inputSource = 'mix') {
     console.log('SimpleRecorder: 开始录音流程')
     
     if (this.isRecording) {
@@ -132,7 +112,7 @@ class SimpleRecorder {
 
     if (!this.stream) {
       console.log('SimpleRecorder: 需要请求麦克风权限')
-      await this.requestPermissionAndStart()
+      await this.requestPermissionAndStart(inputSource)
     } else {
       console.log('SimpleRecorder: 使用现有音频流')
     }
@@ -250,23 +230,40 @@ class SimpleRecorder {
     return this.mediaRecorder.state
   }
 
-  // 检查权限状态
-  async checkPermission() {
-    try {
-      const permission = await navigator.permissions.query({ name: 'microphone' })
-      return permission.state // 'granted', 'denied', 'prompt'
-    } catch (error) {
-      console.warn('无法检查麦克风权限:', error)
-      return 'unknown'
+  // 订阅电平回调（返回0-1）
+  onLevel(callback) {
+    this.levelCallback = callback
+    if (!this.analyser || !this.levelDataArray) return
+    const loop = () => {
+      if (!this.levelCallback) return
+      this.analyser.getByteTimeDomainData(this.levelDataArray)
+      // 计算RMS
+      let sum = 0
+      for (let i = 0; i < this.levelDataArray.length; i++) {
+        const v = (this.levelDataArray[i] - 128) / 128
+        sum += v * v
+      }
+      const rms = Math.sqrt(sum / this.levelDataArray.length)
+      this.levelCallback(Math.min(1, rms * 1.5))
+      requestAnimationFrame(loop)
     }
+    requestAnimationFrame(loop)
   }
+
+  offLevel() { this.levelCallback = null }
+
+  
 
   // 清理资源
   cleanup() {
-    if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop())
-      this.stream = null
+    const stopAll = (s) => { try { s && s.getTracks().forEach(t => t.stop()) } catch {}
     }
+    stopAll(this.stream)
+    stopAll(this.micStream)
+    stopAll(this.tabStream)
+    this.stream = null
+    this.micStream = null
+    this.tabStream = null
     
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       this.mediaRecorder.stop()
@@ -276,6 +273,7 @@ class SimpleRecorder {
     this.chunks = []
     this.isRecording = false
     this.isPaused = false
+    this.levelCallback = null
   }
 }
 

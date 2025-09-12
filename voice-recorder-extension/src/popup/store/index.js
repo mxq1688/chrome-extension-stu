@@ -20,7 +20,14 @@ export const useRecorderStore = defineStore('recorder', {
       audioQuality: 'high', // high, medium, low
       maxRecordingTime: 300, // 5分钟
       autoSave: true,
-      showNotifications: true
+      showNotifications: true,
+      inputSource: 'mix', // mic | tab | mix
+      downloadDir: 'recordings',
+      // 音频处理
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      gain: 1.0
     },
     
     // 权限状态
