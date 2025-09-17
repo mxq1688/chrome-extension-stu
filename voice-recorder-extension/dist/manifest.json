@@ -10,7 +10,9 @@
     "tabs",
     "downloads",
     "tabCapture",
-    "notifications"
+    "notifications",
+    "microphone",
+    "offscreen"
   ],
   "host_permissions": [
     "*://*/*"
@@ -26,7 +28,11 @@
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "service-worker.js"
+  },
+  "offscreen": {
+    "reasons": ["USER_MEDIA"],
+    "justification": "Recording audio requires a persistent document context"
   },
   "content_scripts": [
     {
@@ -36,7 +42,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/*"],
+      "resources": ["assets/*", "permission-helper.html", "offscreen.html"],
       "matches": ["*://*/*"]
     }
   ],

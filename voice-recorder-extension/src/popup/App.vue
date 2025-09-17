@@ -1,24 +1,32 @@
 <template>
   <div class="app">
-    <header class="header">
+    <header class="app-header">
       <div class="header-content">
         <div class="logo">
-          <span class="mic-icon">🎙️</span>
+          <div class="logo-icon">🎙️</div>
+          <div class="logo-text">
           <h1>录音助手</h1>
+            <p>Voice Recorder</p>
+          </div>
         </div>
       </div>
     </header>
     
-    <main class="main">
-      <transition name="slide-fade" mode="out-in">
+    <main class="app-main">
+      <transition name="page-transition" mode="out-in">
         <router-view />
       </transition>
 
       <!-- 保存录音对话框 -->
       <div v-if="showSaveDialog" class="save-dialog-overlay" @click="closeSaveDialog">
         <div class="save-dialog" @click.stop>
+          <div class="dialog-header">
           <h3>保存录音</h3>
+            <button @click="closeSaveDialog" class="close-btn">×</button>
+          </div>
+          <div class="dialog-content">
           <div class="form-group">
+              <label class="form-label">录音名称</label>
             <input 
               v-model="recordingName" 
               type="text" 
@@ -28,20 +36,35 @@
               ref="nameInput"
             >
           </div>
-          <div class="dialog-buttons">
+          </div>
+          <div class="dialog-actions">
             <button @click="closeSaveDialog" class="btn btn-secondary">取消</button>
             <button @click="saveRecording" :disabled="!recordingName.trim()" class="btn btn-primary">
-              保存
+              保存录音
             </button>
           </div>
         </div>
       </div>
     </main>
     
-    <!-- 底部切换导航 -->
-    <nav class="bottom-nav">
-      <button :class="{active: $route.path === '/record'}" @click="$router.push('/record')"><span class="nav-ico">🎙️</span><span>录音</span></button>
-      <button :class="{active: $route.path === '/list'}" @click="$router.push('/list')"><span class="nav-ico">📂</span><span>列表</span></button>
+    <!-- 底部导航 -->
+    <nav class="bottom-navigation">
+      <button 
+        :class="{active: $route.path === '/record'}" 
+        @click="$router.push('/record')"
+        class="nav-button"
+      >
+        <div class="nav-icon">🎙️</div>
+        <div class="nav-label">录音</div>
+      </button>
+      <button 
+        :class="{active: $route.path === '/list'}" 
+        @click="$router.push('/list')"
+        class="nav-button"
+      >
+        <div class="nav-icon">📂</div>
+        <div class="nav-label">列表</div>
+      </button>
     </nav>
   </div>
 </template>
@@ -488,6 +511,23 @@ function cleanup() {
 </script>
 
 <style scoped>
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: #f8f9fa;
+  color: #333;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 应用容器 */
 .app {
   width: 100%;
   height: 100%;
@@ -496,11 +536,14 @@ function cleanup() {
   background: #f8f9fa;
 }
 
-.header {
-  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+/* 应用头部 */
+.app-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 12px 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 20px 24px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+  position: relative;
+  z-index: 10;
 }
 
 .header-content {
@@ -512,135 +555,45 @@ function cleanup() {
 .logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
 }
 
-.mic-icon {
-  font-size: 20px;
-}
-
-.header h1 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.main {
-  flex: 1;
+.logo-icon {
+  font-size: 1.25rem;
+  background: rgba(255, 255, 255, 0.2);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.recording-container {
-  text-align: center;
-  max-width: 300px;
-  width: 100%;
-}
-
-.recording-status {
-  margin-bottom: 30px;
-}
-
-.source-toggle { display: flex; gap: 8px; justify-content: center; margin: 6px 0 18px; }
-.toggle-btn {
-  padding: 6px 10px; border-radius: 999px; border: 1px solid #dfe6e9; background: #fff; color: #2d3436; font-size: 12px; cursor: pointer; transition: all .2s ease;
-}
-.toggle-btn:hover { box-shadow: 0 4px 10px rgba(0,0,0,.06); }
-.toggle-btn.active { background: #3498db; color: #fff; border-color: #3498db; }
-
-.audio-controls { display:flex; gap:12px; justify-content:center; margin: 6px 0; flex-wrap: wrap; }
-.audio-controls .switch { font-size: 12px; color: #2d3436; display:flex; align-items:center; gap:6px; }
-.gain-row { display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom: 12px; }
-.gain { width: 160px; }
-.gain-val { font-size: 12px; color:#636e72; }
-
-.recording-time {
-  font-size: 32px;
+.logo-text h1 {
+  font-size: 1.25rem;
   font-weight: 700;
-  color: #2c3e50;
-  margin-bottom: 8px;
-  font-family: 'Monaco', 'Consolas', monospace;
+  margin: 0;
+  letter-spacing: -0.5px;
 }
 
-.level-bar { height: 8px; background: #ecf0f1; border-radius: 999px; overflow: hidden; width: 220px; margin: 0 auto 8px; }
-.level-bar span { display: block; height: 100%; background: linear-gradient(90deg, #55efc4, #ff7675); width: 0%; transition: width .08s ease; }
-.level-visualizer { display: block; margin: 4px auto 0; width: 260px; height: 48px; }
-
-.recording-control {
-  display: flex;
-  justify-content: center;
+.logo-text p {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin: 0;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
-.record-btn {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  background: #3498db;
-  color: white;
-  box-shadow: 0 4px 20px rgba(52, 152, 219, 0.3);
-}
-
-.record-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 25px rgba(52, 152, 219, 0.4);
-}
-
-.record-btn:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.record-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.record-btn.recording {
-  background: #e74c3c;
-  box-shadow: 0 4px 20px rgba(231, 76, 60, 0.3);
-  animation: pulse 2s infinite;
-}
-
-.record-btn.paused {
-  background: #f39c12;
-  box-shadow: 0 4px 20px rgba(243, 156, 18, 0.3);
-}
-
-@keyframes pulse {
-  0% { 
-    transform: scale(1); 
-    box-shadow: 0 4px 20px rgba(231, 76, 60, 0.3);
-  }
-  50% { 
-    transform: scale(1.02); 
-    box-shadow: 0 6px 25px rgba(231, 76, 60, 0.5);
-  }
-  100% { 
-    transform: scale(1); 
-    box-shadow: 0 4px 20px rgba(231, 76, 60, 0.3);
-  }
-}
-
-.btn-icon {
-  font-size: 24px;
-  margin-bottom: 4px;
-}
-
-.btn-text {
-  font-size: 12px;
-  line-height: 1;
+/* 主内容区域 */
+.app-main {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background: #f8f9fa;
+  padding-bottom: 76px; /* 避免被底部导航遮挡 */
 }
 
 /* 保存对话框样式 */
@@ -650,178 +603,280 @@ function cleanup() {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(8px);
+  animation: overlayFadeIn 0.3s ease-out;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .save-dialog {
   background: white;
-  border-radius: 12px;
-  padding: 24px;
-  width: 90%;
-  max-width: 320px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 20px;
+  width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+  animation: dialogSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
 }
 
-.save-dialog h3 {
-  margin: 0 0 20px 0;
-  color: #2c3e50;
-  text-align: center;
-  font-size: 18px;
+@keyframes dialogSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 24px 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 24px;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #a0aec0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: #f7fafc;
+  color: #4a5568;
+}
+
+.dialog-content {
+  padding: 0 24px;
 }
 
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4a5568;
+  margin-bottom: 8px;
 }
 
 .form-input {
   width: 100%;
-  padding: 12px;
-  border: 2px solid #e1e5e9;
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.2s ease;
-  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  outline: none;
+  background: #f7fafc;
 }
 
 .form-input:focus {
-  outline: none;
-  border-color: #3498db;
+  border-color: #667eea;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.dialog-buttons {
+.dialog-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  padding: 0 24px 24px 24px;
 }
 
 .btn {
-  padding: 10px 20px;
+  padding: 12px 24px;
   border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: #3498db;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #2980b9;
+  font-family: inherit;
+  min-width: 80px;
 }
 
 .btn-secondary {
-  background: #95a5a6;
+  background: #f7fafc;
+  color: #4a5568;
+  border: 2px solid #e2e8f0;
+}
+
+.btn-secondary:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: #7f8c8d;
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
- 
-/* 列表样式 */
-.list-section {
-  padding: 0 20px 24px;
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
-.list-title {
-  margin: 0 0 12px 0;
-  color: #2c3e50;
-  font-size: 14px;
-  font-weight: 700;
+/* 底部导航 */
+.bottom-navigation {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  z-index: 20;
 }
 
-.recordings {
+.nav-button {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.record-item {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  gap: 4px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: #a0aec0;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  min-width: 80px;
+  position: relative;
 }
 
-.rec-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
+.nav-button:hover {
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  transform: translateY(-2px);
 }
 
-.rec-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+.nav-button.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.nav-button.active::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: #667eea;
+  border-radius: 50%;
+}
+
+.nav-icon {
+  font-size: 1.25rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #74b9ff, #a29bfe);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(116,185,255,.35);
 }
 
-.rec-info { min-width: 0; }
-.rec-name {
+.nav-label {
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #2d3436;
-  font-size: 14px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  max-width: 160px;
+  letter-spacing: 0.5px;
 }
-.rec-meta {
-  margin-top: 2px;
-  color: #7f8c8d;
-  font-size: 12px;
+
+/* 页面过渡动画 */
+.page-transition-enter-active {
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-.rec-meta .dot { margin: 0 6px; }
 
-.rec-actions { display: flex; gap: 8px; }
-.pill {
-  border: none;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform .15s ease, box-shadow .2s ease;
+.page-transition-leave-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-.pill:hover { transform: translateY(-1px); }
-.pill-webm { background: #dfe6e9; color: #2d3436; }
-.pill-wav { background: #ffeaa7; color: #6d4c41; }
-.pill-mp3 { background: #55efc4; color: #00695c; }
-.pill-webm:hover { box-shadow: 0 4px 12px rgba(99,110,114,0.25); }
-.pill-wav:hover { box-shadow: 0 4px 12px rgba(255,234,167,0.45); }
-.pill-mp3:hover { box-shadow: 0 4px 12px rgba(85,239,196,0.45); }
 
-.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px; background: #fff; box-shadow: 0 -4px 14px rgba(0,0,0,.06); display:flex; justify-content:center; gap:12px; }
-.bottom-nav button { border: none; padding: 8px 16px; border-radius: 999px; background: #ecf0f1; color: #2d3436; font-weight:600; cursor:pointer; min-width: 96px; }
-.bottom-nav button.active { background: #3498db; color: #fff; }
-.bottom-nav .nav-ico { margin-right: 6px; }
+.page-transition-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
 
-/* 过渡动画 */
-.slide-fade-enter-active { transition: all .25s ease; }
-.slide-fade-leave-active { transition: all .2s ease; }
-.slide-fade-enter-from { opacity: 0; transform: translateY(8px); }
-.slide-fade-leave-to { opacity: 0; transform: translateY(-6px); }
+.page-transition-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* 响应式设计 */
+@media (max-width: 320px) {
+  .app {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+  
+  .logo {
+    gap: 12px;
+  }
+  
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.5rem;
+  }
+  
+  .logo-text h1 {
+    font-size: 1.25rem;
+  }
+  
+  .bottom-navigation {
+    padding: 8px 12px;
+    gap: 12px;
+  }
+  
+  .nav-button {
+    padding: 8px 16px;
+    min-width: 70px;
+  }
+}
 </style>

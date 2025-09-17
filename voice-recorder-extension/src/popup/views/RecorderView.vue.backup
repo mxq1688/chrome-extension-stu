@@ -36,7 +36,6 @@
         </div>
       </div>
     </div>
-
     <!-- 录音状态区域 -->
     <div class="recording-status-card">
       <div class="time-display">
@@ -199,15 +198,18 @@ async function toggleRecording() {
       const audioData = await recorder.stopRecording()
       store.setRecordingState(false, false)
       store.resetRecordingTime()
-      stopTimer()
-      stopVisualizer()
-      console.log('录音停止', audioData)
+      // 将数据透传给顶层（使用自定义事件）
+      const ev = new CustomEvent('record-stopped', { detail: audioData })
+      window.dispatchEvent(ev)
     }
-  } catch (error) {
-    console.error('录音操作失败:', error)
-  } finally {
-    isProcessing.value = false
-  }
+  } finally { isProcessing.value = false }
+}
+
+function startTimer() {
+  if (recordingTimer.value) clearInterval(recordingTimer.value)
+  recordingTimer.value = setInterval(() => {
+    if (!store.isPaused) store.updateRecordingTime(store.recordingTime + 1)
+  }, 1000)
 }
 
 function startVisualizer() {
@@ -403,31 +405,6 @@ function injectFloatingWindow(popupUrl) {
     console.error('注入浮动窗失败:', err)
   }
 }
-
-function startTimer() {
-  if (recordingTimer.value) {
-    clearInterval(recordingTimer.value)
-  }
-  
-  recordingTimer.value = setInterval(() => {
-    if (!store.isPaused) {
-      store.updateRecordingTime(store.recordingTime + 1)
-      
-      if (store.recordingTime >= store.settings.maxDuration * 60) {
-        console.log('达到最大录音时长，自动停止')
-        toggleRecording()
-      }
-    }
-  }, 1000)
-}
-
-function stopTimer() {
-  if (recordingTimer.value) {
-    clearInterval(recordingTimer.value)
-    recordingTimer.value = null
-  }
-}
-</script>
 
 <style scoped>
 .recorder-view {
@@ -766,6 +743,25 @@ function stopTimer() {
   box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
 }
 
+/* 响应式设计 */
+@media (max-width: 320px) {
+  .recorder-view {
+    padding: 16px;
+  }
+  
+  .time-value {
+    font-size: 2rem;
+  }
+  
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .source-toggle-group {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* 固定方式选择对话框样式 */
 .pin-options-overlay {
   position: fixed;
@@ -883,23 +879,5 @@ function stopTimer() {
   color: #718096;
   line-height: 1.4;
 }
-
-/* 响应式设计 */
-@media (max-width: 320px) {
-  .recorder-view {
-    padding: 16px;
-  }
-  
-  .time-value {
-    font-size: 2rem;
-  }
-  
-  .controls-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .source-toggle-group {
-    grid-template-columns: 1fr;
-  }
-}
 </style>
+
